@@ -4,14 +4,36 @@ var VSHADER_SOURCE = `
   uniform mat4 u_ModelMatrix;
   uniform mat4 u_ViewMatrix;
   uniform mat4 u_ProjectionMatrix;
+  uniform mat4 u_NormalMatrix;
+  uniform vec3 u_LightColor;
+  uniform vec3 u_LightPosition;
+  uniform vec3 u_AmbientLight;
 
   attribute vec4 a_Position;
+  attribute vec4 a_Normal;
   attribute vec2 a_UV;
 
   varying vec2 v_UV;
+  varying vec4 v_Normal;
+  varying vec4 v_LitColor;
   void main() {
     v_UV = a_UV;
+    v_Normal = u_NormalMatrix * a_Normal;
     gl_Position = u_ProjectionMatrix * u_ViewMatrix * u_ModelMatrix * a_Position;
+
+    vec4 color = vec4(1.0, 1.0, 1.0, 1.0);
+
+    vec4 vertexPosition = u_ModelMatrix * a_Position;
+
+    vec3 lightDirection = normalize(u_LightPosition - vec3(vertexPosition));
+
+    float nDotL = max(dot(lightDirection, v_Normal.xyz), 0.0);
+
+    vec3 diffuse = u_LightColor * color.rgb * nDotL;
+
+    vec3 ambient = u_AmbientLight * color.rgb;
+
+    v_LitColor = vec4(diffuse + ambient, color.a);
   }`
 
 // Fragment shader program
@@ -29,14 +51,18 @@ var FSHADER_SOURCE = `
   uniform float u_ColorWeight;
 
   varying vec2 v_UV;
+  varying vec4 v_Normal;
+  varying vec4 v_LitColor;
 
   void main() {
   if (u_SelectedTexture == 0) {
-    gl_FragColor = (u_FragColor * u_ColorWeight) + ((1.0 - u_ColorWeight) * texture2D(u_Texture0, v_UV));
+    gl_FragColor = mix(v_LitColor, (u_FragColor * u_ColorWeight) + ((1.0 - u_ColorWeight) * texture2D(u_Texture0, v_UV)), 0.5);
   } else if (u_SelectedTexture == 1) {
-    gl_FragColor = (u_FragColor * u_ColorWeight) + ((1.0 - u_ColorWeight) * texture2D(u_Texture1, v_UV));
+    gl_FragColor = mix(v_LitColor, (u_FragColor * u_ColorWeight) + ((1.0 - u_ColorWeight) * texture2D(u_Texture1, v_UV)), 0.5);
+  } else if (u_SelectedTexture == 2) {
+    gl_FragColor = mix(v_LitColor, (u_FragColor * u_ColorWeight) + ((1.0 - u_ColorWeight) * texture2D(u_Texture2, v_UV)), 0.5);
   } else {
-    gl_FragColor = (u_FragColor * u_ColorWeight) + ((1.0 - u_ColorWeight) * texture2D(u_Texture2, v_UV));
+    gl_FragColor = mix(v_LitColor, u_FragColor, 0.5);
   }
   }`;
 
@@ -48,17 +74,26 @@ let u_FragColor;
 let u_ModelMatrix;
 let u_ProjectionMatrix;
 let u_ViewMatrix;
-let a_UV;
 
+let a_Normal;
+let u_NormalMatrix;
+let u_AmbientLight;
+let u_LightColor;
+let u_LightPosition;
+
+let a_UV;
 let u_Texture0;
 let u_Texture1;
 let u_Texture2;
-
 let u_SelectedTexture;
 
 let u_ColorWeight;
 
 let skyCube;
+
+let lightbulb;
+let litSphere;
+
 let groundCube;
 let groundCube2;
 let groundCube3;
@@ -92,91 +127,6 @@ function setupWebGL() {
   });
 
   gl.enable(gl.DEPTH_TEST);
-}
-
-function connectVariablesToGLSL() {
-  // Initialize shaders
-  if (!initShaders(gl, VSHADER_SOURCE, FSHADER_SOURCE)) {
-    console.log('Failed to intialize shaders.');
-    return;
-  }
-
-  // Get the storage location of a_Position
-  a_Position = gl.getAttribLocation(gl.program, 'a_Position');
-  if (a_Position < 0) {
-    console.log('Failed to get the storage location of a_Position');
-    return;
-  }
-
-  // Get the storage location of u_FragColor
-  u_FragColor = gl.getUniformLocation(gl.program, 'u_FragColor');
-  if (!u_FragColor) {
-    console.log('Failed to get the storage location of u_FragColor');
-    return;
-  }
-
-  // Get the storage location of u_ColorWeight
-  u_ColorWeight = gl.getUniformLocation(gl.program, 'u_ColorWeight');
-  if (!u_ColorWeight) {
-    console.log('Failed to get the storage location of u_ColorWeight');
-    return;
-  }
-
-  // Get the storage location of u_ModelMatrix
-  u_ModelMatrix = gl.getUniformLocation(gl.program, 'u_ModelMatrix');
-  if (!u_ModelMatrix) {
-    console.log('Failed to get the storage location of u_ModelMatrix');
-    return;
-  }
-
-  // Get the storage location of u_ModelMatrix
-  u_ProjectionMatrix = gl.getUniformLocation(gl.program, 'u_ProjectionMatrix');
-  if (!u_ProjectionMatrix) {
-    console.log('Failed to get the storage location of u_ProjectionMatrix');
-    return;
-  }
-
-  // Get the storage location of u_ModelMatrix
-  u_ViewMatrix = gl.getUniformLocation(gl.program, 'u_ViewMatrix');
-  if (!u_ViewMatrix) {
-    console.log('Failed to get the storage location of u_ViewMatrix');
-    return;
-  }
-
-  // Get the storage location of u_Texture0
-  u_Texture0 = gl.getUniformLocation(gl.program, 'u_Texture0');
-  if (!u_Texture0) {
-    console.log('Failed to get the storage location of u_Texture0');
-    return;
-  }
-
-  // Get the storage location of u_Texture1
-  u_Texture1 = gl.getUniformLocation(gl.program, 'u_Texture1');
-  if (!u_Texture1) {
-    console.log('Failed to get the storage location of u_Texture1');
-    return;
-  }
-
-  // Get the storage location of u_Texture0
-  u_Texture2 = gl.getUniformLocation(gl.program, 'u_Texture2');
-  if (!u_Texture2) {
-    console.log('Failed to get the storage location of u_Texture2');
-    return;
-  }
-
-  // Get the storage location of u_SelectedTexture
-  u_SelectedTexture = gl.getUniformLocation(gl.program, 'u_SelectedTexture');
-  if (!u_SelectedTexture) {
-    console.log('Failed to get the storage location of u_SelectedTexture');
-    return;
-  }
-
-  // Get the storage location of a_UV
-  a_UV = gl.getAttribLocation(gl.program, 'a_UV');
-  if (!a_UV) {
-    console.log('Failed to get the storage location of a_UV');
-    return;
-  }
 }
 
 // HTML FUNCTIONS //
@@ -214,7 +164,17 @@ function main() {
   requestAnimationFrame(tick);
 }
 
+let g_startTime = performance.now() / 1000.0;
+let g_seconds = performance.now() / 1000.0 - g_startTime;
+
 function tick() {
+  // Save time
+  g_seconds = performance.now() / 1000.0 - g_startTime;
+
+  lightbulb.position.elements = [Math.cos(g_seconds) * 5 + 5.0, 8.0, Math.sin(g_seconds) * 5 + 7.0];
+  // Set the light direction (in the world coordinate)
+  gl.uniform3f(u_LightPosition, Math.cos(g_seconds) * 5 + 5.0, 8.0, Math.sin(g_seconds) * 5 + 7.0);
+
   renderScene();
 
   requestAnimationFrame(tick);
@@ -237,58 +197,6 @@ function keydown(ev) {
     case 83: camera.moveBackwards(); break;
     case 81: camera.panHorizontal(.1); break;
     case 69: camera.panHorizontal(-.1); break;
-    case 70: {
-      placeBlock();
-      break;
-    }
-    case 71: {
-      breakBlock();
-      break;
-    }
-  }
-}
-
-function getForwardCoords() {
-  let f = new Vector3();
-  f.set(camera.goalTarget);
-  f.sub(camera.goalPosition);
-  f.normalize();
-  f.add(camera.goalPosition);
-  // console.log(f.elements[0], f.elements[1], f.elements[2]);
-  let f_rounded = new Vector3([Math.round(f.elements[0]), Math.round(f.elements[1]), Math.round(f.elements[2])])
-  return f_rounded.elements;
-}
-
-function placeBlock() {
-  // Add Block
-  console.log("attempting to add...");
-  let targetCoord = new Vector3(getForwardCoords());
-  console.log(targetCoord);
-  let wall = new Cube();
-  wall.position = new Vector3([targetCoord.elements[0], targetCoord.elements[1], targetCoord.elements[2]]);
-  wall.color = [0.35, 0.25, 0.15, 1.0];
-  wall.solidColorWeight = Math.random() * 0.75;
-  wallCubes.push(wall);
-  console.log("added block at ", targetCoord.elements[0], targetCoord.elements[1], targetCoord.elements[2]);
-}
-
-
-function breakBlock() {
-  // Delete Block
-  console.log("attempting to remove...");
-  let targetCoord = new Vector3(getForwardCoords());
-  console.log(targetCoord);
-  for (let i = 0; i < wallCubes.length; i++) {
-    // console.log(targetCoord.elements[0], targetCoord.elements[1], targetCoord.elements[2], " | ", wallCubes[i].position.elements[0], wallCubes[i].position.elements[1], wallCubes[i].position.elements[2]);
-    if (
-      targetCoord.elements[0] == wallCubes[i].position.elements[0] &&
-      targetCoord.elements[1] == wallCubes[i].position.elements[1] &&
-      targetCoord.elements[2] == wallCubes[i].position.elements[2]
-    ) {
-      wallCubes.splice(i, 1);
-      console.log("removed block");
-    }
-
   }
 }
 
@@ -388,20 +296,26 @@ function createWorldObjects() {
     }
   }
 
-  // METEORS //
+  // Light
+  // Set the light color (white)
+  gl.uniform3f(u_LightColor, 0.8, 0.8, 0.8);
+  // Set the light direction (in the world coordinate)
+  gl.uniform3f(u_LightPosition, 5.0, 8.0, 7.0);
+  // Set the ambient light
+  gl.uniform3f(u_AmbientLight, 0.2, 0.2, 0.2);
 
-  for (let i = 0; i < 16; i++) {
-    for (let j = 0; j < 16; j++) {
-      let meteor = new Cube();
-      meteor.position = new Vector3([i * 2, Math.random() * 500 + 250, j * 2]);
-      meteor.rotation = new Vector3([45, 0, 45]);
-      let metScale = (Math.random() * 2);
-      meteor.scale.elements[0] *= metScale;
-      meteor.scale.elements[1] *= metScale;
-      meteor.scale.elements[2] *= metScale;
-      meteorCubes.push(meteor);
-    }
-  }
+  // Lightbulb sphere
+  lightbulb = new Cube();
+  lightbulb.position = new Vector3([5.0, 8.0, 7.0]);
+  lightbulb.color = [0.9, 0.9, 0.9, 1.0];
+  lightbulb.scale.elements = [0.25, 0.25, 0.25];
+  lightbulb.solidColorWeight = 1.0;
+
+  // Light-testing sphere
+  litSphere = new Cube();
+  litSphere.position = new Vector3([8, 6, 8]);
+  litSphere.color = [0.15, 0.45, 0.35, 1.0];
+  litSphere.solidColorWeight = 0.0;
 }
 
 function renderScene() {
@@ -431,17 +345,133 @@ function renderScene() {
     wallCubes[i].render(gl, camera);
   }
 
-  // Meteors
-  for (let i = 0; i < meteorCubes.length; i++) {
-    meteorCubes[i].position.elements[1] -= 0.5;
-    if (meteorCubes[i].position.elements[1] < -1) {
-      meteorCubes[i].position.elements[1] = Math.random() * 500 + 250;
-    }
-    meteorCubes[i].render(gl, camera);
-  }
+  lightbulb.render(gl, camera);
+
+  // Select normal texture in shader uniform 
+  gl.uniform1i(u_SelectedTexture, -1);
+  litSphere.render(gl, camera);
 
   camera.update();
 
   updatePerformanceIndicator(tickStartTime)
 }
 
+function connectVariablesToGLSL() {
+  // Initialize shaders
+  if (!initShaders(gl, VSHADER_SOURCE, FSHADER_SOURCE)) {
+    console.log('Failed to intialize shaders.');
+    return;
+  }
+
+  // Get the storage location of a_Position
+  a_Position = gl.getAttribLocation(gl.program, 'a_Position');
+  if (a_Position < 0) {
+    console.log('Failed to get the storage location of a_Position');
+    return;
+  }
+
+  // Get the storage location of u_FragColor
+  u_FragColor = gl.getUniformLocation(gl.program, 'u_FragColor');
+  if (!u_FragColor) {
+    console.log('Failed to get the storage location of u_FragColor');
+    return;
+  }
+
+  // Get the storage location of u_ColorWeight
+  u_ColorWeight = gl.getUniformLocation(gl.program, 'u_ColorWeight');
+  if (!u_ColorWeight) {
+    console.log('Failed to get the storage location of u_ColorWeight');
+    return;
+  }
+
+  // Get the storage location of u_ModelMatrix
+  u_ModelMatrix = gl.getUniformLocation(gl.program, 'u_ModelMatrix');
+  if (!u_ModelMatrix) {
+    console.log('Failed to get the storage location of u_ModelMatrix');
+    return;
+  }
+
+  // Get the storage location of u_ModelMatrix
+  u_ProjectionMatrix = gl.getUniformLocation(gl.program, 'u_ProjectionMatrix');
+  if (!u_ProjectionMatrix) {
+    console.log('Failed to get the storage location of u_ProjectionMatrix');
+    return;
+  }
+
+  // Get the storage location of u_ModelMatrix
+  u_ViewMatrix = gl.getUniformLocation(gl.program, 'u_ViewMatrix');
+  if (!u_ViewMatrix) {
+    console.log('Failed to get the storage location of u_ViewMatrix');
+    return;
+  }
+
+  // Get the storage location of u_NormalMatrix
+  u_NormalMatrix = gl.getUniformLocation(gl.program, 'u_NormalMatrix');
+  if (!u_NormalMatrix) {
+    console.log('Failed to get the storage location of u_NormalMatrix');
+    return;
+  }
+
+  // Get the storage location of u_LightColor
+  u_LightColor = gl.getUniformLocation(gl.program, 'u_LightColor');
+  if (!u_LightColor) {
+    console.log('Failed to get the storage location of u_LightColor');
+    return;
+  }
+
+  // Get the storage location of u_LightPosition
+  u_LightPosition = gl.getUniformLocation(gl.program, 'u_LightPosition');
+  if (!u_LightPosition) {
+    console.log('Failed to get the storage location of u_LightPosition');
+    return;
+  }
+
+  // Get the storage location of u_AmbientLight
+  u_AmbientLight = gl.getUniformLocation(gl.program, 'u_AmbientLight');
+  if (!u_AmbientLight) {
+    console.log('Failed to get the storage location of u_AmbientLight');
+    return;
+  }
+
+  // Get the storage location of u_Texture0
+  u_Texture0 = gl.getUniformLocation(gl.program, 'u_Texture0');
+  if (!u_Texture0) {
+    console.log('Failed to get the storage location of u_Texture0');
+    return;
+  }
+
+  // Get the storage location of u_Texture1
+  u_Texture1 = gl.getUniformLocation(gl.program, 'u_Texture1');
+  if (!u_Texture1) {
+    console.log('Failed to get the storage location of u_Texture1');
+    return;
+  }
+
+  // Get the storage location of u_Texture0
+  u_Texture2 = gl.getUniformLocation(gl.program, 'u_Texture2');
+  if (!u_Texture2) {
+    console.log('Failed to get the storage location of u_Texture2');
+    return;
+  }
+
+  // Get the storage location of u_SelectedTexture
+  u_SelectedTexture = gl.getUniformLocation(gl.program, 'u_SelectedTexture');
+  if (!u_SelectedTexture) {
+    console.log('Failed to get the storage location of u_SelectedTexture');
+    return;
+  }
+
+  // Get the storage location of a_UV
+  a_UV = gl.getAttribLocation(gl.program, 'a_UV');
+  if (!a_UV) {
+    console.log('Failed to get the storage location of a_UV');
+    return;
+  }
+
+  // Get the storage location of a_Normal
+  a_Normal = gl.getAttribLocation(gl.program, 'a_Normal');
+  if (!a_Normal) {
+    console.log('Failed to get the storage location of a_Normal');
+    return;
+  }
+}
