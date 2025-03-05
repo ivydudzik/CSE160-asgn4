@@ -93,6 +93,8 @@ let skyCube;
 
 let lightbulb;
 let litSphere;
+let litSphereDEBUG;
+
 
 let groundCube;
 let groundCube2;
@@ -226,55 +228,6 @@ function createWorldObjects() {
   skyCube.solidColorWeight = 0.5;
   skyCube.scale.mul(999);
 
-  // GROUND //
-  groundCube = new Cube();
-  groundCube.color = [0.35, 0.25, 0.15, 1.0];
-  groundCube.solidColorWeight = 1.0;
-  // Flatten and widen floor
-  groundCube.scale.elements[0] *= 32;
-  groundCube.scale.elements[1] *= 0.01;
-  groundCube.scale.elements[2] *= 32;
-  // Move floor 
-  groundCube.position.elements[0] = 16 - 0.5;
-  groundCube.position.elements[1] = 4.505;
-  groundCube.position.elements[2] = -16 - 0.5;
-
-  groundCube2 = new Cube();
-  groundCube2.color = [0.35, 0.25, 0.15, 1.0];
-  groundCube2.solidColorWeight = 1.0;
-  // Flatten and widen floor
-  groundCube2.scale.elements[0] *= 32;
-  groundCube2.scale.elements[1] *= 0.01;
-  groundCube2.scale.elements[2] *= 96;
-  // Move floor 
-  groundCube2.position.elements[0] = 48 - 0.5;
-  groundCube2.position.elements[1] = 4.505;
-  groundCube2.position.elements[2] = 16 - 0.5;
-
-  groundCube3 = new Cube();
-  groundCube3.color = [0.35, 0.25, 0.15, 1.0];
-  groundCube3.solidColorWeight = 1.0;
-  // Flatten and widen floor
-  groundCube3.scale.elements[0] *= 32;
-  groundCube3.scale.elements[1] *= 0.01;
-  groundCube3.scale.elements[2] *= 32;
-  // Move floor 
-  groundCube3.position.elements[0] = 16 - 0.5;
-  groundCube3.position.elements[1] = 4.505;
-  groundCube3.position.elements[2] = 48 - 0.5;
-
-  groundCube4 = new Cube();
-  groundCube4.color = [0.35, 0.25, 0.15, 1.0];
-  groundCube4.solidColorWeight = 1.0;
-  // Flatten and widen floor
-  groundCube4.scale.elements[0] *= 32;
-  groundCube4.scale.elements[1] *= 0.01;
-  groundCube4.scale.elements[2] *= 96;
-  // Move floor 
-  groundCube4.position.elements[0] = -16 - 0.5;
-  groundCube4.position.elements[1] = 4.505;
-  groundCube4.position.elements[2] = 16 - 0.5;
-
   // Map
   // In its own file Map.js
 
@@ -312,10 +265,16 @@ function createWorldObjects() {
   lightbulb.solidColorWeight = 1.0;
 
   // Light-testing sphere
-  litSphere = new Cube();
+  litSphere = new Sphere();
   litSphere.position = new Vector3([8, 6, 8]);
   litSphere.color = [0.15, 0.45, 0.35, 1.0];
   litSphere.solidColorWeight = 0.0;
+
+  // Light-testing sphere DEBUG
+  litSphereDEBUG = new Sphere();
+  litSphereDEBUG.position = new Vector3([8, 8, 8]);
+  litSphereDEBUG.color = [0.15, 0.45, 0.35, 1.0];
+  litSphereDEBUG.solidColorWeight = 0.0;
 }
 
 function renderScene() {
@@ -331,13 +290,6 @@ function renderScene() {
   gl.uniform1i(u_SelectedTexture, 1);
   skyCube.render(gl, camera);
 
-  // Select debug texture in shader uniform (will be covered by colorweight)
-  gl.uniform1i(u_SelectedTexture, 2);
-  groundCube.render(gl, camera);
-  groundCube2.render(gl, camera);
-  groundCube3.render(gl, camera);
-  groundCube4.render(gl, camera);
-
   // Select sunspot texture in shader uniform 
   gl.uniform1i(u_SelectedTexture, 0);
   // Cubes
@@ -351,6 +303,7 @@ function renderScene() {
   gl.uniform1i(u_SelectedTexture, -1);
   litSphere.render(gl, camera);
 
+  litSphereDEBUG.render(gl, camera);
   camera.update();
 
   updatePerformanceIndicator(tickStartTime)

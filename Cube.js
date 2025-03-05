@@ -119,6 +119,8 @@ class Cube {
             camera.projectionMatrix.elements
         );
 
+        gl.bindBuffer(gl.ARRAY_BUFFER, null);
+
         // VERTS
         if (this.vertexBuffer === null) {
             this.vertexBuffer = gl.createBuffer();
