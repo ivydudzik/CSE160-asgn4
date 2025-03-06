@@ -158,6 +158,9 @@ let g_normalOn = false;
 let g_lightRotation = 1.55;
 let g_lightAnimateOn = true;
 let g_lightOn = true;
+let g_lightColorX = 1.0;
+let g_lightColorY = 0.9;
+let g_lightColorZ = 0.9;
 
 // Set up actions for HTML UI elements
 function addActionsForHtmlUI() {
@@ -172,6 +175,10 @@ function addActionsForHtmlUI() {
   document.getElementById('animOff').onclick = function () { g_lightAnimateOn = false; };
 
   document.getElementById('LightRotation').addEventListener("mousemove", function () { g_lightRotation = this.value; });
+
+  document.getElementById('LightR').addEventListener("mousemove", function () { g_lightColorX = this.value; });
+  document.getElementById('LightG').addEventListener("mousemove", function () { g_lightColorY = this.value; });
+  document.getElementById('LightB').addEventListener("mousemove", function () { g_lightColorZ = this.value; });
 }
 
 function main() {
@@ -291,7 +298,7 @@ function createWorldObjects() {
 
   // Light
   // Set the light color (white)
-  gl.uniform3f(u_LightColor, 1, 0.9, 0.9);
+  gl.uniform3f(u_LightColor, g_lightColorX, g_lightColorY, g_lightColorZ);
   // Set the light direction (in the world coordinate)
   gl.uniform3f(u_LightPosition, 5.0, 8.0, 7.0);
   // Set the ambient light
@@ -325,6 +332,9 @@ function renderScene() {
   gl.clear(gl.DEPTH_BUFFER_BIT);
 
   camera.update();
+
+  // SET LIGHT COLOR BASED ON SLIDER VALS
+  gl.uniform3f(u_LightColor, g_lightColorX, g_lightColorY, g_lightColorZ);
 
   gl.uniform3f(u_CameraPosition, camera.position.elements[0], camera.position.elements[1], camera.position.elements[2]);
 
