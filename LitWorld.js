@@ -5,9 +5,8 @@ var VSHADER_SOURCE = `
   uniform mat4 u_ViewMatrix;
   uniform mat4 u_ProjectionMatrix;
   uniform mat4 u_NormalMatrix;
-  uniform vec3 u_LightColor;
   uniform vec3 u_LightPosition;
-  uniform vec3 u_AmbientLight;
+  uniform vec3 u_CameraPosition;
 
   attribute vec4 a_Position;
   attribute vec4 a_Normal;
@@ -15,7 +14,8 @@ var VSHADER_SOURCE = `
 
   varying vec2 v_UV;
   varying vec4 v_Normal;
-  varying vec4 v_LitColor;
+  varying vec3 v_LightDirection;
+  varying vec3 v_EyeDirection;
   void main() {
     v_UV = a_UV;
     v_Normal = u_NormalMatrix * a_Normal;
@@ -25,15 +25,9 @@ var VSHADER_SOURCE = `
 
     vec4 vertexPosition = u_ModelMatrix * a_Position;
 
-    vec3 lightDirection = normalize(u_LightPosition - vec3(vertexPosition));
+    v_LightDirection = normalize(u_LightPosition - vec3(vertexPosition));
 
-    float nDotL = max(dot(lightDirection, v_Normal.xyz), 0.0);
-
-    vec3 diffuse = u_LightColor * color.rgb * nDotL;
-
-    vec3 ambient = u_AmbientLight * color.rgb;
-
-    v_LitColor = vec4(diffuse + ambient, color.a);
+    v_EyeDirection = normalize(u_CameraPosition - vec3(vertexPosition));
   }`
 
 // Fragment shader program
@@ -45,6 +39,7 @@ var FSHADER_SOURCE = `
   uniform sampler2D u_Texture2;
 
   uniform int u_SelectedTexture;
+  uniform int u_Lit;
 
   uniform vec4 u_FragColor;
 
@@ -52,18 +47,41 @@ var FSHADER_SOURCE = `
 
   varying vec2 v_UV;
   varying vec4 v_Normal;
-  varying vec4 v_LitColor;
+  varying vec3 v_LightDirection;
+  varying vec3 v_EyeDirection;
+
+  uniform vec3 u_LightColor;
+  uniform vec3 u_AmbientLight;
 
   void main() {
   if (u_SelectedTexture == 0) {
-    gl_FragColor = mix(v_LitColor, (u_FragColor * u_ColorWeight) + ((1.0 - u_ColorWeight) * texture2D(u_Texture0, v_UV)), 0.5);
+    gl_FragColor = (u_FragColor * u_ColorWeight) + ((1.0 - u_ColorWeight) * texture2D(u_Texture0, v_UV));
   } else if (u_SelectedTexture == 1) {
-    gl_FragColor = mix(v_LitColor, (u_FragColor * u_ColorWeight) + ((1.0 - u_ColorWeight) * texture2D(u_Texture1, v_UV)), 0.5);
+    gl_FragColor = (u_FragColor * u_ColorWeight) + ((1.0 - u_ColorWeight) * texture2D(u_Texture1, v_UV));
   } else if (u_SelectedTexture == 2) {
-    gl_FragColor = mix(v_LitColor, (u_FragColor * u_ColorWeight) + ((1.0 - u_ColorWeight) * texture2D(u_Texture2, v_UV)), 0.5);
+    gl_FragColor = (u_FragColor * u_ColorWeight) + ((1.0 - u_ColorWeight) * texture2D(u_Texture2, v_UV));
+  } else if (u_SelectedTexture == -1) {
+    gl_FragColor = vec4((v_Normal.xyz+1.0)/2.0, 1.0);
   } else {
-    gl_FragColor = mix(v_LitColor, u_FragColor, 0.5);
+    gl_FragColor = u_FragColor;
   }
+
+  if (u_Lit == 1) {
+    float nDotL = max(dot(v_LightDirection, v_Normal.xyz), 0.0);
+
+    vec3 diffuse = u_LightColor * gl_FragColor.rgb * nDotL;
+
+    vec3 ambient = u_AmbientLight * gl_FragColor.rgb;
+
+    vec3 reflection = reflect(-v_LightDirection, v_Normal.xyz);
+
+    float specular = pow(max(dot(v_EyeDirection, reflection), 0.0), 10.0);
+
+    vec4 litColor = vec4(diffuse + ambient + specular, gl_FragColor.a);
+
+    gl_FragColor = litColor;
+  }
+  
   }`;
 
 // Global Vars
@@ -74,10 +92,12 @@ let u_FragColor;
 let u_ModelMatrix;
 let u_ProjectionMatrix;
 let u_ViewMatrix;
+let u_CameraPosition;
 
 let a_Normal;
 let u_NormalMatrix;
 let u_AmbientLight;
+let u_Lit;
 let u_LightColor;
 let u_LightPosition;
 
@@ -134,11 +154,24 @@ function setupWebGL() {
 // HTML FUNCTIONS //
 
 // UI Globals
-let g_viewAngleY = 45;
-let g_viewAngleX = -5;
+let g_normalOn = false;
+let g_lightRotation = 1.55;
+let g_lightAnimateOn = true;
+let g_lightOn = true;
 
 // Set up actions for HTML UI elements
 function addActionsForHtmlUI() {
+  document.getElementById('normOn').onclick = function () { g_normalOn = true; };
+  document.getElementById('normOff').onclick = function () { g_normalOn = false; };
+
+  document.getElementById('lightOn').onclick = function () { g_lightOn = true; };
+  document.getElementById('lightOff').onclick = function () { g_lightOn = false; };
+
+
+  document.getElementById('animOn').onclick = function () { g_lightAnimateOn = true; };
+  document.getElementById('animOff').onclick = function () { g_lightAnimateOn = false; };
+
+  document.getElementById('LightRotation').addEventListener("mousemove", function () { g_lightRotation = this.value; });
 }
 
 function main() {
@@ -173,9 +206,16 @@ function tick() {
   // Save time
   g_seconds = performance.now() / 1000.0 - g_startTime;
 
-  lightbulb.position.elements = [Math.cos(g_seconds) * 5 + 5.0, 8.0, Math.sin(g_seconds) * 5 + 7.0];
-  // Set the light direction (in the world coordinate)
-  gl.uniform3f(u_LightPosition, Math.cos(g_seconds) * 5 + 5.0, 8.0, Math.sin(g_seconds) * 5 + 7.0);
+  if (g_lightAnimateOn) {
+    lightbulb.position.elements = [Math.cos(g_seconds) * 5 + 5.0, 8.0, Math.sin(g_seconds) * 5 + 7.0];
+    // Set the light direction (in the world coordinate)
+    gl.uniform3f(u_LightPosition, Math.cos(g_seconds) * 5 + 5.0, 8.0, Math.sin(g_seconds) * 5 + 7.0);
+  } else {
+    lightbulb.position.elements = [Math.cos(g_lightRotation) * 5 + 5.0, 8.0, Math.sin(g_lightRotation) * 5 + 7.0];
+    // Set the light direction (in the world coordinate)
+    gl.uniform3f(u_LightPosition, Math.cos(g_lightRotation) * 5 + 5.0, 8.0, Math.sin(g_lightRotation) * 5 + 7.0);
+  }
+
 
   renderScene();
 
@@ -251,11 +291,11 @@ function createWorldObjects() {
 
   // Light
   // Set the light color (white)
-  gl.uniform3f(u_LightColor, 0.8, 0.8, 0.8);
+  gl.uniform3f(u_LightColor, 1, 0.9, 0.9);
   // Set the light direction (in the world coordinate)
   gl.uniform3f(u_LightPosition, 5.0, 8.0, 7.0);
   // Set the ambient light
-  gl.uniform3f(u_AmbientLight, 0.2, 0.2, 0.2);
+  gl.uniform3f(u_AmbientLight, 0.3, 0.3, 0.3);
 
   // Lightbulb sphere
   lightbulb = new Cube();
@@ -284,14 +324,18 @@ function renderScene() {
   gl.clear(gl.COLOR_BUFFER_BIT);
   gl.clear(gl.DEPTH_BUFFER_BIT);
 
-  // (COULD SWITCH TEXTURE SELECTION TO HAPPEN INSIDE CUBE BASED ON A PARAM)
+  camera.update();
+
+  gl.uniform3f(u_CameraPosition, camera.position.elements[0], camera.position.elements[1], camera.position.elements[2]);
 
   // Select sky texture in shader uniform
   gl.uniform1i(u_SelectedTexture, 1);
   skyCube.render(gl, camera);
 
-  // Select sunspot texture in shader uniform 
-  gl.uniform1i(u_SelectedTexture, 0);
+  // Select sunspot or normal texture in shader uniform 
+  if (g_lightOn) { gl.uniform1i(u_Lit, 1); } else { gl.uniform1i(u_Lit, 0); }
+  if (g_normalOn) { gl.uniform1i(u_SelectedTexture, -1); } else { gl.uniform1i(u_SelectedTexture, 0); }
+
   // Cubes
   for (let i = 0; i < wallCubes.length; i++) {
     wallCubes[i].render(gl, camera);
@@ -299,12 +343,12 @@ function renderScene() {
 
   lightbulb.render(gl, camera);
 
-  // Select normal texture in shader uniform 
-  gl.uniform1i(u_SelectedTexture, -1);
+  // Select flat color or normal texture in shader uniform 
+  if (g_normalOn) { gl.uniform1i(u_SelectedTexture, -1); } else { gl.uniform1i(u_SelectedTexture, -999); }
   litSphere.render(gl, camera);
 
   litSphereDEBUG.render(gl, camera);
-  camera.update();
+
 
   updatePerformanceIndicator(tickStartTime)
 }
@@ -365,6 +409,13 @@ function connectVariablesToGLSL() {
     return;
   }
 
+  // Get the storage location of u_Lit
+  u_Lit = gl.getUniformLocation(gl.program, 'u_Lit');
+  if (!u_Lit) {
+    console.log('Failed to get the storage location of u_Lit');
+    return;
+  }
+
   // Get the storage location of u_LightColor
   u_LightColor = gl.getUniformLocation(gl.program, 'u_LightColor');
   if (!u_LightColor) {
@@ -378,6 +429,14 @@ function connectVariablesToGLSL() {
     console.log('Failed to get the storage location of u_LightPosition');
     return;
   }
+
+  // Get the storage location of u_LightPosition
+  u_CameraPosition = gl.getUniformLocation(gl.program, 'u_CameraPosition');
+  if (!u_CameraPosition) {
+    console.log('Failed to get the storage location of u_CameraPosition');
+    return;
+  }
+
 
   // Get the storage location of u_AmbientLight
   u_AmbientLight = gl.getUniformLocation(gl.program, 'u_AmbientLight');
