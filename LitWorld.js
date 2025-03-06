@@ -40,6 +40,7 @@ var FSHADER_SOURCE = `
 
   uniform int u_SelectedTexture;
   uniform int u_Lit;
+  uniform int u_Spotlit;
 
   uniform vec4 u_FragColor;
 
@@ -79,7 +80,18 @@ var FSHADER_SOURCE = `
 
     vec4 litColor = vec4(diffuse + ambient + specular, gl_FragColor.a);
 
-    gl_FragColor = litColor;
+    vec4 spotlightShadowColor = vec4(ambient, gl_FragColor.a);
+
+    if (u_Spotlit == 1) {
+      if (dot(v_LightDirection, vec3(0.0, 1.0, 0.0)) > 0.5) {
+        gl_FragColor = litColor;
+      } else {
+        gl_FragColor = spotlightShadowColor;
+      }
+    } else {
+      gl_FragColor = litColor;
+    }
+    
   }
   
   }`;
@@ -98,6 +110,7 @@ let a_Normal;
 let u_NormalMatrix;
 let u_AmbientLight;
 let u_Lit;
+let u_Spotlit;
 let u_LightColor;
 let u_LightPosition;
 
@@ -157,7 +170,6 @@ function setupWebGL() {
 let g_normalOn = false;
 let g_lightRotation = 1.55;
 let g_lightAnimateOn = true;
-let g_lightOn = true;
 let g_lightColorX = 1.0;
 let g_lightColorY = 0.9;
 let g_lightColorZ = 0.9;
@@ -167,9 +179,11 @@ function addActionsForHtmlUI() {
   document.getElementById('normOn').onclick = function () { g_normalOn = true; };
   document.getElementById('normOff').onclick = function () { g_normalOn = false; };
 
-  document.getElementById('lightOn').onclick = function () { g_lightOn = true; };
-  document.getElementById('lightOff').onclick = function () { g_lightOn = false; };
+  document.getElementById('lightOn').onclick = function () { gl.uniform1i(u_Lit, 1); };
+  document.getElementById('lightOff').onclick = function () { gl.uniform1i(u_Lit, 0); };
 
+  document.getElementById('spotlightOn').onclick = function () { gl.uniform1i(u_Spotlit, 1); };
+  document.getElementById('spotlightOff').onclick = function () { gl.uniform1i(u_Spotlit, 0); };
 
   document.getElementById('animOn').onclick = function () { g_lightAnimateOn = true; };
   document.getElementById('animOff').onclick = function () { g_lightAnimateOn = false; };
@@ -304,6 +318,10 @@ function createWorldObjects() {
   // Set the ambient light
   gl.uniform3f(u_AmbientLight, 0.3, 0.3, 0.3);
 
+  // Set the scene to lit by a point light
+  gl.uniform1i(u_Lit, 1);
+  gl.uniform1i(u_Spotlit, 0);
+
   // Lightbulb sphere
   lightbulb = new Cube();
   lightbulb.position = new Vector3([5.0, 8.0, 7.0]);
@@ -343,7 +361,6 @@ function renderScene() {
   skyCube.render(gl, camera);
 
   // Select sunspot or normal texture in shader uniform 
-  if (g_lightOn) { gl.uniform1i(u_Lit, 1); } else { gl.uniform1i(u_Lit, 0); }
   if (g_normalOn) { gl.uniform1i(u_SelectedTexture, -1); } else { gl.uniform1i(u_SelectedTexture, 0); }
 
   // Cubes
@@ -423,6 +440,13 @@ function connectVariablesToGLSL() {
   u_Lit = gl.getUniformLocation(gl.program, 'u_Lit');
   if (!u_Lit) {
     console.log('Failed to get the storage location of u_Lit');
+    return;
+  }
+
+  // Get the storage location of u_Spotlit
+  u_Spotlit = gl.getUniformLocation(gl.program, 'u_Spotlit');
+  if (!u_Spotlit) {
+    console.log('Failed to get the storage location of u_Spotlit');
     return;
   }
 
